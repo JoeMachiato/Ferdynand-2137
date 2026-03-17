@@ -25,6 +25,20 @@ ffmpeg_options = {
     'options': '-vn -ss 27 -t 60'
 }
 
+def findBestChannel(guild):
+    best_channel = None
+    most_people = 0
+
+    for channel in guild.voice_channels:
+        real_members = [member for member in channel.members if not member.bot]
+        liczba_osob = len(real_members)
+
+        if liczba_osob > most_people:
+            most_people = liczba_osob
+            best_channel = channel
+
+    return best_channel
+
 class Ferdynand(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -37,18 +51,32 @@ class Ferdynand(discord.Client):
 
     tz_poland = zoneinfo.ZoneInfo("Europe/Warsaw")
     
-    @tasks.loop(time=datetime.time(hour=21, minute=37, tzinfo=tz_poland))
+    @tasks.loop(time=datetime.time(hour=21, minute=37, second=5, tzinfo=tz_poland))
     async def daily_message(self):
         text_channel = self.get_channel(TEXT_CHANNEL_ID)
-        voice_channel = self.get_channel(VOICE_CHANNEL_ID)
+        fallback_voice_channel = self.get_channel(VOICE_CHANNEL_ID)
         
         if text_channel:
             message = f"<@&{ROLE_ID}> WYBIŁA PAPIEŻOWA 2137!"
             for i in range(3):
                 await text_channel.send(message, allowed_mentions=discord.AllowedMentions(everyone=True))
 
-        if voice_channel and isinstance(voice_channel, discord.VoiceChannel):
-            vc = await voice_channel.connect()
+        target_voice_channel = None
+        guild = None
+        
+        if fallback_voice_channel:
+            guild = fallback_voice_channel.guild
+        elif text_channel:
+            guild = text_channel.guild
+
+        if guild:
+            target_voice_channel = findBestChannel(guild)
+
+        if target_voice_channel is None:
+            target_voice_channel = fallback_voice_channel
+
+        if target_voice_channel and isinstance(target_voice_channel, discord.VoiceChannel):
+            vc = await target_voice_channel.connect()
             
             song_url = "https://www.youtube.com/watch?v=2yusdx60_aw"
             
@@ -64,7 +92,9 @@ class Ferdynand(discord.Client):
                 
             await vc.disconnect()
 
-intents = discord.Intents.default()
-client = Ferdynand(intents=intents)
 
+intents = discord.Intents.default()
+intents.members = True
+
+client = Ferdynand(intents=intents)
 client.run(TOKEN)
